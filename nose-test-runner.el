@@ -2,6 +2,8 @@
 ;;; Commentary:
 ;;; Code:
 
+(setq lexical-binding t)
+
 (defvar *original-mode-line* mode-line-format)
 
 ;; Coloring the mode-line seems a bit off:
@@ -48,19 +50,30 @@
 Further parameters as PARAMS.
 Working dir to use as WORKINGDIR."
   (let* ((test-dir (expand-file-name workingdir))
-         (joined-params (append params (list test-dir)))
+         (arguments (append params (list test-dir)))
          (proc-name "test-proc")
          (proc-buffer "*tests*")
-         (proc (apply 'start-process proc-name proc-buffer cmd joined-params)))
+         (proc (apply 'start-process proc-name proc-buffer cmd arguments)))
     (set-process-filter proc 'test-run-finished)))
 
 ;; This is specific to the project and should be put elsewhere.
 
-(defun test-nose-func ()
+(defun test-nose-func (process msg)
   ""
   (test-func "nosetests" '("--exe") "~/Code/Python/opencv_web_service/mapper/tests/"))
 
+(defun install-monitor-linux (file func)
+  "Function using inotifywait to monitor the file system and only run
+the associated function when changes are detected."
+  (let* ((cmd "inotifywait")
+         (filepath (expand-file-name file))
+         (arguments (list "-m" "-e" "create" filepath))
+         (process (apply 'start-process "NOTIFYWAIT" "*notifywait*" cmd arguments)))
+    (set-process-filter process func)))
+
 (defun install-monitor (file secs func)
+  "First implementation that used continous polling.
+Will still work for Windows / Mac OS X."
   (lexical-let ((monitor-attributes (file-attributes file))
                 (fun func))
     (run-with-timer
@@ -72,8 +85,7 @@ Working dir to use as WORKINGDIR."
          (setq monitor-attributes att)))
      file secs)))
 
-(setq monitor-timer (install-monitor
+(setq monitor-timer (install-monitor-linux
                      (expand-file-name "~/Code/Python/opencv_web_service/mapper/tests/")
-                     5
                      'test-nose-func))
 ;;; monitor-dir.el ends here
