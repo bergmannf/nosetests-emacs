@@ -1,6 +1,7 @@
 ;;; package --- Summary
 ;;; Commentary:
 ;;; Code:
+(require 'file-change-monitor)
 
 (setq lexical-binding t)
 
@@ -22,31 +23,31 @@
   :group 'nose-monitor)
 
 (defun display-error ()
-  ""
+  "Color the mode-line to show an error has occurred."
   (set-face-background 'mode-line error-color)
   (setq mode-line-format
         (append *original-mode-line* '("ERR"))))
 
 (defun display-success ()
-  ""
+  "Color the mode-line to show tests completed successful."
   (set-face-background 'mode-line success-color)
   (setq mode-line-format
         (append *original-mode-line* '("SUCC"))))
 
 (defun display-unknown ()
-  ""
+  "Color the mode-line indeterminate."
   (set-face-background 'mode-line unknown-color)
   (setq mode-line-format
         (append *original-mode-line* '("UNK"))))
 
 (defun test-run-finished (process msg)
-  ""
+  "Check the test output and color the mode-line accordingly."
   (cond ((string-match fail-regex msg) (display-error))
         ((string-match success-regex msg) (display-success))
         (:else (display-unknown))))
 
 (defun test-func (cmd params workingdir)
-  "Run the nosetests function and send output to 'nose-indicator.
+  "Run the test-cmd (AS CMD) and send output to 'test-run-finished function.
 Further parameters as PARAMS.
 Working dir to use as WORKINGDIR."
   (let* ((test-dir (expand-file-name workingdir))
@@ -62,30 +63,13 @@ Working dir to use as WORKINGDIR."
   ""
   (test-func "nosetests" '("--exe") "~/Code/Python/opencv_web_service/mapper/tests/"))
 
-(defun install-monitor-linux (file func)
-  "Function using inotifywait to monitor the file system and only run
-the associated function when changes are detected."
-  (let* ((cmd "inotifywait")
-         (filepath (expand-file-name file))
-         (arguments (list "-m" "-e" "create" filepath))
-         (process (apply 'start-process "NOTIFYWAIT" "*notifywait*" cmd arguments)))
-    (set-process-filter process func)))
+(defun start-monitor-nose (directory)
+  "Start a nosetest monitor on the given directory (AS DIRECTORY)."
+  (let ((filepath (expand-file-name directory))
+        (os system-type))
+    (cond ((eq 'gnu/linux os)
+           (install-monitor-linux filepath 'test-nose-func))
+          ((t (install-monitor filepath 5 (lambda () (test-nose-func nil nil))))))))
 
-(defun install-monitor (file secs func)
-  "First implementation that used continous polling.
-Will still work for Windows / Mac OS X."
-  (lexical-let ((monitor-attributes (file-attributes file))
-                (fun func))
-    (run-with-timer
-     0 secs
-     (lambda (f p)
-       (let ((att (file-attributes f)))
-         (unless (or (null monitor-attributes) (equalp monitor-attributes att))
-           (funcall fun))
-         (setq monitor-attributes att)))
-     file secs)))
-
-(setq monitor-timer (install-monitor-linux
-                     (expand-file-name "~/Code/Python/opencv_web_service/mapper/tests/")
-                     'test-nose-func))
-;;; monitor-dir.el ends here
+(start-monitor-nose "~/Code/Python/opencv_web_service/mapper/tests/")
+;;; nose-test-runner.el ends here
